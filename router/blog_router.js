@@ -11,12 +11,13 @@ const Blog = mongoose.model(`${process.env.BLOGS_COLLECTION}`, blog_schema);
 
 let deleted_id = null;
 let updated_id = null;
+let comment_id = null;
 export const getUpdates = (socket) => {
   const newUpdate = mongoose.connection
     .collection(`${process.env.BLOGS_COLLECTION}`)
     .watch();
   newUpdate.on("change", (change) => {
-    console.log(change);
+    // console.log(change);
     if (change.operationType === "delete") {
       if (deleted_id !== change?.documentKey?._id) {
         deleted_id = change?.documentKey?._id;
@@ -30,6 +31,16 @@ export const getUpdates = (socket) => {
         if (updated_id !== change?.documentKey?._id) {
           updated_id = change?.documentKey?._id;
           socket.emit("updated-blog-id", change.documentKey);
+        }
+      } else if (change?.updateDescription?.updatedFields?.comments) {
+        if (comment_id !== change?.documentKey?._id) {
+          comment_id = change?.documentKey?._id;
+          const comments = change?.updateDescription?.updatedFields?.comments;
+          // console.log(comments[comments.length - 1]);
+          socket.emit("find-a-new-comment", {
+            _id: change?.documentKey?._id,
+            ...comments[comments.length - 1],
+          });
         }
       }
     }
@@ -102,6 +113,24 @@ router.put("/update-blog", (req, res) => {
         res.status(404).send(err.message);
       } else {
         res.status(200).send(blog);
+      }
+    }
+  );
+});
+
+router.put("/upload-comment/:id", (req, res) => {
+  const comment = req.body;
+  const id = req.params.id;
+  Blog.updateOne(
+    { _id: id },
+    {
+      $addToSet: { comments: comment },
+    },
+    (err, update) => {
+      if (err) {
+        res.status(404).send(err.message);
+      } else {
+        res.status(200).send(update);
       }
     }
   );

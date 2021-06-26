@@ -57,10 +57,14 @@ router.post("/find-user", (req, res) => {
     if (err) {
       res.status(404).send(err.message);
     } else {
-      if (account.password === password) {
-        res.status(200).send(account);
+      if (password) {
+        if (account.password === password) {
+          res.status(200).send(account);
+        } else {
+          res.status(404).send("password was not match");
+        }
       } else {
-        res.status(404).send("password was not match");
+        res.status(200).send(account);
       }
     }
   });
