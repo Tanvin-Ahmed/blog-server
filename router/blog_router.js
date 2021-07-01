@@ -9,9 +9,11 @@ const router = express.Router();
 
 const Blog = mongoose.model(`${process.env.BLOGS_COLLECTION}`, blog_schema);
 
+let post_id = null;
 let deleted_id = null;
 let updated_id = null;
 let comment_id = null;
+let like_id = null;
 export const getUpdates = (socket) => {
   const newUpdate = mongoose.connection
     .collection(`${process.env.BLOGS_COLLECTION}`)
@@ -30,7 +32,10 @@ export const getUpdates = (socket) => {
       ) {
         if (updated_id !== change?.documentKey?._id) {
           updated_id = change?.documentKey?._id;
-          socket.emit("updated-blog-id", change.documentKey);
+          socket.emit("updated-blog-data", {
+            _id: change?.documentKey?._id,
+            ...change?.updateDescription?.updatedFields,
+          });
         }
       } else if (change?.updateDescription?.updatedFields?.comments) {
         if (comment_id !== change?.documentKey?._id) {
@@ -39,9 +44,25 @@ export const getUpdates = (socket) => {
           // console.log(comments[comments.length - 1]);
           socket.emit("find-a-new-comment", {
             _id: change?.documentKey?._id,
-            ...comments[comments.length - 1],
+            comments,
           });
         }
+      } else if (change?.updateDescription?.updatedFields?.like) {
+        if (like_id !== change?.documentKey?._id) {
+          like_id = change?.documentKey?._id;
+          const likes = change?.updateDescription?.updatedFields?.like;
+
+          socket.emit("find-new-like", {
+            _id: change?.documentKey?._id,
+            likes,
+          });
+        }
+      }
+    } else if (change.operationType === "insert") {
+      if (post_id !== change?.documentKey?._id) {
+        post_id = change?.documentKey?._id;
+
+        socket.emit("upload-new-blog", change.fullDocument);
       }
     }
   });
@@ -125,6 +146,41 @@ router.put("/upload-comment/:id", (req, res) => {
     { _id: id },
     {
       $addToSet: { comments: comment },
+    },
+    (err, update) => {
+      if (err) {
+        res.status(404).send(err.message);
+      } else {
+        res.status(200).send(update);
+      }
+    }
+  );
+});
+
+router.put("/upload-like/:id", (req, res) => {
+  const email = req.body;
+  Blog.updateOne(
+    { _id: req.params.id },
+    {
+      $addToSet: { like: email },
+    },
+    (err, update) => {
+      if (err) {
+        res.status(404).send(err.message);
+      } else {
+        res.status(200).send(update);
+      }
+    }
+  );
+});
+
+router.put("/upload-unlike/:id", (req, res) => {
+  const email = req.body.email;
+
+  Blog.updateOne(
+    { _id: req.params.id },
+    {
+      $pull: { like: { email } },
     },
     (err, update) => {
       if (err) {
